@@ -64,16 +64,26 @@ function summarizeSuggestion(s: Suggestion, byId: Map<number, Item>): string {
   return `[${s.formality}] ${names.join(", ")}${noteSuffix}`;
 }
 
-function recentlySuggestedItemIds(recent: Suggestion[]): number[] {
-  const set = new Set<number>();
+function recentlySuggestedByCategory(
+  recent: Suggestion[],
+  byId: Map<number, Item>,
+): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
   for (const s of recent.slice(0, 8)) {
+    let ids: number[] = [];
     try {
-      JSON.parse(s.itemIds).forEach((id: number) => set.add(id));
+      ids = JSON.parse(s.itemIds);
     } catch {
-      // Ignore malformed rows.
+      continue;
+    }
+    for (const id of ids) {
+      const item = byId.get(id);
+      if (!item) continue;
+      const list = out[item.category] || (out[item.category] = []);
+      if (!list.includes(id)) list.push(id);
     }
   }
-  return Array.from(set);
+  return out;
 }
 
 function buildPrompt(
@@ -121,9 +131,10 @@ Hard constraints:
 - Match the requested dress code register, but interpret it liberally — different colors, textures, and combinations within the register are encouraged.
 
 Diversity expectations (soft):
-- Strongly avoid producing the same shirt or shoes as the recent suggestions in \`recentlySuggestedItemIds\`. The user has already seen those.
+- For EVERY category — shirt, pants, shoes, watch, socks, accessory — prefer items NOT listed in \`recentlySuggestedByCategory\`. If a category has more than one option in the wardrobe, do not repeat the same one across consecutive suggestions.
+- The new outfit should differ from the most recent suggestion in at least 3 of the 6 categories. If the wardrobe only has one item in some category, that's the only category where repeating is acceptable.
 - Push beyond the rules-engine baseline; the baseline is just a safe fallback. If you can find a more interesting combination that still matches the constraints, choose it.
-- Prefer items with low wearCount or that haven't appeared in recent suggestions.${variationHint}
+- Rotate underused items: prefer items with lower wearCount or that haven't appeared in recent suggestions.${variationHint}
 
 Context:
 ${JSON.stringify(
@@ -136,7 +147,7 @@ ${JSON.stringify(
     },
     targetFormality,
     recentItemIds: recentItemIds(recentWears),
-    recentlySuggestedItemIds: recentlySuggestedItemIds(recentSuggestions),
+    recentlySuggestedByCategory: recentlySuggestedByCategory(recentSuggestions, byId),
     rulesEngineBaselineIds: fallback.items.map((item) => item.id),
     userLikedExamples: likedSummaries,
     userDislikedExamples: dislikedSummaries,
