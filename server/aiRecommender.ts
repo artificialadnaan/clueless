@@ -81,7 +81,7 @@ function buildPrompt(
 Hard constraints:
 - Return JSON only, with no markdown.
 - Only use item ids that exist in the wardrobe.
-- Include one shirt, one pants item, one shoes item, and preferably one socks item, one watch, and one accessory.
+- Pick AT MOST ONE item per category. Required: exactly one shirt, one pants, one shoes. Optional: at most one socks, at most one watch, at most one accessory. Never include two items from the same category.
 - Avoid items worn recently when reasonable.
 - Respect weather suitability using each item's minTempF and maxTempF.
 - Avoid suede in rain or snow.
@@ -197,20 +197,28 @@ function validateChoice(choice: ModelChoice, items: Item[]) {
   const selected = choice.selectedItemIds
     .map((id) => byId.get(id))
     .filter((item): item is Item => Boolean(item));
-  const unique = Array.from(new Map(selected.map((item) => [item.id, item])).values());
+
+  // One item per category — keep the first occurrence in the AI's order.
+  const byCategory = new Map<string, Item>();
+  for (const item of selected) {
+    if (!byCategory.has(item.category)) {
+      byCategory.set(item.category, item);
+    }
+  }
+  const dedupedByCategory = Array.from(byCategory.values());
 
   for (const category of ["shirt", "pants", "shoes"]) {
-    if (!unique.some((item) => item.category === category)) {
+    if (!byCategory.has(category)) {
       throw new Error(`AI response missing required category: ${category}`);
     }
   }
 
-  if (unique.length < 3) {
+  if (dedupedByCategory.length < 3) {
     throw new Error("AI response did not select enough valid items");
   }
 
   return {
-    items: unique,
+    items: dedupedByCategory,
     reasons: choice.reasons
       .filter((reason) => typeof reason === "string" && reason.trim().length > 0)
       .slice(0, 5),
