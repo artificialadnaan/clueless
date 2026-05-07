@@ -5,8 +5,9 @@ import { ItemThumb } from "@/components/ItemThumb";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WeatherEditor } from "@/components/WeatherEditor";
-import { Sparkles, Check, RefreshCw, ShieldCheck, WandSparkles } from "lucide-react";
+import { Sparkles, Check, RefreshCw, ShieldCheck, WandSparkles, Upload } from "lucide-react";
 import { useState } from "react";
+import { Link } from "wouter";
 import {
   Select,
   SelectContent,
@@ -34,8 +35,9 @@ export default function Today() {
   const [useAi, setUseAi] = useState(true);
   const { toast } = useToast();
 
-  const { data: rec, isLoading, refetch } = useQuery<Recommendation>({
+  const { data: rec, isLoading, isError, refetch } = useQuery<Recommendation>({
     queryKey: ["/api/recommend", { formality, seed, useAi }],
+    retry: false,
     queryFn: async () => {
       const res = await apiRequest(
         "GET",
@@ -44,6 +46,14 @@ export default function Today() {
       return res.json();
     },
   });
+
+  const { data: items = [] } = useQuery<Item[]>({
+    queryKey: ["/api/items"],
+  });
+
+  const REQUIRED = ["shirt", "pants", "shoes"] as const;
+  const presentCategories = new Set(items.map((i) => i.category));
+  const missingCategories = REQUIRED.filter((c) => !presentCategories.has(c));
 
   const markWorn = useMutation({
     mutationFn: async () => {
@@ -152,11 +162,39 @@ export default function Today() {
             )}
           </div>
 
-          {isLoading || !rec ? (
+          {isLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" data-testid="loading-outfit">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="aspect-square rounded-md bg-muted animate-pulse" />
               ))}
+            </div>
+          ) : isError || !rec ? (
+            <div className="rounded-md border border-dashed border-card-border p-8 text-center" data-testid="empty-recommendation">
+              <Sparkles className="size-6 mx-auto text-muted-foreground mb-3" />
+              <div className="font-medium text-base mb-1">No outfit yet</div>
+              {missingCategories.length > 0 ? (
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Your wardrobe is missing{" "}
+                  <span className="font-medium text-foreground">
+                    {missingCategories.join(", ")}
+                  </span>
+                  . Import or add at least one of each before the stylist can build a full outfit.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Couldn't build an outfit for {formality.replace("-", " ")} at today's weather. Try a different dress code or reshuffle.
+                </p>
+              )}
+              <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                <Link href="/import">
+                  <Button variant="default">
+                    <Upload className="size-4" /> Import photos
+                  </Button>
+                </Link>
+                <Button variant="outline" onClick={() => refetch()}>
+                  <RefreshCw className="size-4" /> Try again
+                </Button>
+              </div>
             </div>
           ) : (
             <>
