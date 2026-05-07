@@ -1,4 +1,4 @@
-import { users, items, wears, weather, suggestions } from "@shared/schema";
+import { users, items, wears, weather, suggestions, itemPhotos } from "@shared/schema";
 import type {
   User,
   InsertUser,
@@ -11,6 +11,9 @@ import type {
   Suggestion,
   InsertSuggestion,
   Rating,
+  ItemPhoto,
+  InsertItemPhoto,
+  PhotoKind,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -74,6 +77,27 @@ CREATE TABLE IF NOT EXISTS suggestions (
   rating TEXT,
   notes TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS item_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'stock',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_item_photos_item_id ON item_photos(item_id);
+`);
+
+// Backfill: any item whose image_path is set but has no item_photos row
+// gets a corresponding 'stock' row, so the new schema is consistent for
+// items that were imported before this feature shipped.
+sqlite.exec(`
+INSERT INTO item_photos (item_id, filename, kind, created_at)
+SELECT i.id, i.image_path, 'stock', i.created_at
+FROM items i
+WHERE i.image_path IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM item_photos p WHERE p.item_id = i.id AND p.filename = i.image_path
+  );
 `);
 
 try {
@@ -99,6 +123,12 @@ export interface IStorage {
 
   getWeather(): Promise<Weather | undefined>;
   setWeather(w: InsertWeather): Promise<Weather>;
+
+  listItemPhotos(itemId: number): Promise<ItemPhoto[]>;
+  listAllItemPhotos(): Promise<ItemPhoto[]>;
+  addItemPhoto(p: InsertItemPhoto): Promise<ItemPhoto>;
+  deleteItemPhoto(id: number): Promise<void>;
+  updateItem(id: number, patch: Partial<InsertItem>): Promise<Item | undefined>;
 
   createSuggestion(s: InsertSuggestion): Promise<Suggestion>;
   listSuggestions(limit?: number): Promise<Suggestion[]>;
@@ -174,6 +204,37 @@ export class DatabaseStorage implements IStorage {
     // Single-row pattern: replace existing
     db.delete(weather).run();
     return db.insert(weather).values(w).returning().get();
+  }
+
+  async listItemPhotos(itemId: number): Promise<ItemPhoto[]> {
+    return db
+      .select()
+      .from(itemPhotos)
+      .where(eq(itemPhotos.itemId, itemId))
+      .orderBy(desc(itemPhotos.createdAt))
+      .all();
+  }
+  async listAllItemPhotos(): Promise<ItemPhoto[]> {
+    return db.select().from(itemPhotos).orderBy(desc(itemPhotos.createdAt)).all();
+  }
+  async addItemPhoto(p: InsertItemPhoto): Promise<ItemPhoto> {
+    return db
+      .insert(itemPhotos)
+      .values({ ...p, createdAt: Date.now() })
+      .returning()
+      .get();
+  }
+  async deleteItemPhoto(id: number): Promise<void> {
+    db.delete(itemPhotos).where(eq(itemPhotos.id, id)).run();
+  }
+  async updateItem(id: number, patch: Partial<InsertItem>): Promise<Item | undefined> {
+    const updated = db
+      .update(items)
+      .set(patch)
+      .where(eq(items.id, id))
+      .returning()
+      .get();
+    return updated;
   }
 
   async createSuggestion(s: InsertSuggestion): Promise<Suggestion> {

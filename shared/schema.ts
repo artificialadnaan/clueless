@@ -47,6 +47,24 @@ export const insertItemSchema = createInsertSchema(items)
 export type InsertItem = z.infer<typeof insertItemSchema>;
 export type Item = typeof items.$inferSelect;
 
+export const PHOTO_KINDS = ["stock", "real"] as const;
+export type PhotoKind = (typeof PHOTO_KINDS)[number];
+
+export const itemPhotos = sqliteTable("item_photos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: integer("item_id").notNull(),
+  filename: text("filename").notNull(),
+  kind: text("kind").notNull().default("stock"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const insertItemPhotoSchema = createInsertSchema(itemPhotos).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertItemPhoto = z.infer<typeof insertItemPhotoSchema>;
+export type ItemPhoto = typeof itemPhotos.$inferSelect;
+
 // Outfits worn — record of a coordinated outfit on a given day
 export const wears = sqliteTable("wears", {
   id: integer("id").primaryKey({ autoIncrement: true }),

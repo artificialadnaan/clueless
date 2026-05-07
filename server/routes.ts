@@ -127,6 +127,7 @@ export async function registerRoutes(
             ...enriched.fields,
             imagePath: filename,
           });
+          await storage.addItemPhoto({ itemId: item.id, filename, kind: "stock" });
           created.push({ filename: file.originalname, item });
         } catch (error) {
           const message = error instanceof Error ? error.message : "unknown error";
@@ -137,6 +138,82 @@ export async function registerRoutes(
       res.json({ created, failed });
     },
   );
+
+  app.get("/api/items/:id/photos", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+    const photos = await storage.listItemPhotos(id);
+    res.json(photos);
+  });
+
+  app.post(
+    "/api/items/:id/photos",
+    upload.single("photo"),
+    async (req, res) => {
+      const id = parseInt(String(req.params.id), 10);
+      if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+      const item = await storage.getItem(id);
+      if (!item) return res.status(404).json({ error: "item not found" });
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "no file" });
+      if (!isAllowedMime(file.mimetype)) {
+        return res.status(400).json({ error: `unsupported mime: ${file.mimetype}` });
+      }
+      const kind = req.body.kind === "real" ? "real" : "stock";
+      const retag = req.body.retag === "1" || req.body.retag === "true";
+
+      const { filename } = saveImage(file.buffer, file.mimetype);
+      const photo = await storage.addItemPhoto({ itemId: id, filename, kind });
+
+      let updatedItem = item;
+      let aiError: string | undefined;
+      if (retag && isVisionConfigured()) {
+        try {
+          const enriched = await enrichImageWithVision(file.buffer, file.mimetype);
+          const patch: Partial<import("@shared/schema").InsertItem> = {
+            name: enriched.fields.name,
+            color: enriched.fields.color,
+            colorHex: enriched.fields.colorHex,
+            formality: enriched.fields.formality,
+            season: enriched.fields.season,
+            minTempF: enriched.fields.minTempF,
+            maxTempF: enriched.fields.maxTempF,
+            notes: enriched.fields.notes,
+          };
+          if (kind === "real") {
+            patch.imagePath = filename;
+          }
+          const next = await storage.updateItem(id, patch);
+          if (next) updatedItem = next;
+        } catch (e) {
+          aiError = e instanceof Error ? e.message : "retag failed";
+        }
+      } else if (kind === "real") {
+        const next = await storage.updateItem(id, { imagePath: filename });
+        if (next) updatedItem = next;
+      }
+
+      res.json({ photo, item: updatedItem, aiError });
+    },
+  );
+
+  app.delete("/api/items/:id/photos/:photoId", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const photoId = parseInt(req.params.photoId, 10);
+    if (isNaN(id) || isNaN(photoId)) return res.status(400).json({ error: "bad id" });
+    await storage.deleteItemPhoto(photoId);
+    res.json({ ok: true });
+  });
+
+  app.patch("/api/items/:id", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+    const parsed = insertItemSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const updated = await storage.updateItem(id, parsed.data);
+    if (!updated) return res.status(404).json({ error: "not found" });
+    res.json(updated);
+  });
 
   app.get("/api/images/:filename", (req, res) => {
     const result = streamImage(req.params.filename);

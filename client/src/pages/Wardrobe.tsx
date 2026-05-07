@@ -7,7 +7,8 @@ import { ItemThumb } from "@/components/ItemThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, Pencil } from "lucide-react";
+import { ItemDetailDialog } from "@/components/ItemDetailDialog";
 import {
   Dialog,
   DialogContent,
@@ -160,6 +161,7 @@ export default function Wardrobe() {
 
 function ItemCard({ item }: { item: Item }) {
   const { toast } = useToast();
+  const [editorOpen, setEditorOpen] = useState(false);
   const del = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/items/${item.id}`);
@@ -175,9 +177,14 @@ function ItemCard({ item }: { item: Item }) {
       className="group rounded-md border border-card-border bg-card p-3 hover-elevate"
       data-testid={`card-item-${item.id}`}
     >
-      <div className="aspect-square flex items-center justify-center rounded-sm bg-background/60">
+      <button
+        type="button"
+        onClick={() => setEditorOpen(true)}
+        className="block w-full aspect-square flex items-center justify-center rounded-sm bg-background/60 cursor-pointer"
+        aria-label="Open item details"
+      >
         <ItemThumb item={item} />
-      </div>
+      </button>
       <div className="mt-2.5 flex items-start justify-between gap-1">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -190,17 +197,26 @@ function ItemCard({ item }: { item: Item }) {
             {item.color}
           </div>
         </div>
-        <button
-          aria-label="Delete item"
-          className={cn(
-            "shrink-0 size-7 rounded text-muted-foreground hover-elevate flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100"
-          )}
-          onClick={() => del.mutate()}
-          data-testid={`button-delete-${item.id}`}
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        <div className="shrink-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+          <button
+            aria-label="Edit item"
+            className="size-7 rounded text-muted-foreground hover-elevate flex items-center justify-center"
+            onClick={() => setEditorOpen(true)}
+            data-testid={`button-edit-${item.id}`}
+          >
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            aria-label="Delete item"
+            className="size-7 rounded text-muted-foreground hover-elevate flex items-center justify-center"
+            onClick={() => del.mutate()}
+            data-testid={`button-delete-${item.id}`}
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
       </div>
+      <ItemDetailDialog item={item} open={editorOpen} onOpenChange={setEditorOpen} />
       <div className="mt-2 flex flex-wrap gap-1">
         <Badge variant="secondary" className="text-[10px] capitalize">
           {item.formality}
