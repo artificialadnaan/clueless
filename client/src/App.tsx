@@ -9,6 +9,7 @@ import Today from "@/pages/Today";
 import Wardrobe from "@/pages/Wardrobe";
 import Dashboard from "@/pages/Dashboard";
 import Import from "@/pages/Import";
+import History from "@/pages/History";
 import { AppShell } from "@/components/AppShell";
 
 function AppRouter() {
@@ -18,6 +19,7 @@ function AppRouter() {
       <Route path="/wardrobe" component={Wardrobe} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/import" component={Import} />
+      <Route path="/history" component={History} />
       <Route component={NotFound} />
     </Switch>
   );

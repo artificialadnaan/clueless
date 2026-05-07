@@ -1,4 +1,4 @@
-import { users, items, wears, weather } from "@shared/schema";
+import { users, items, wears, weather, suggestions } from "@shared/schema";
 import type {
   User,
   InsertUser,
@@ -8,6 +8,9 @@ import type {
   InsertWear,
   Weather,
   InsertWeather,
+  Suggestion,
+  InsertSuggestion,
+  Rating,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
@@ -57,6 +60,20 @@ CREATE TABLE IF NOT EXISTS weather (
   city TEXT NOT NULL DEFAULT 'Chicago',
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at INTEGER NOT NULL,
+  formality TEXT NOT NULL,
+  source TEXT NOT NULL,
+  ai_provider TEXT,
+  ai_model TEXT,
+  item_ids TEXT NOT NULL,
+  reasons TEXT NOT NULL DEFAULT '[]',
+  score INTEGER NOT NULL DEFAULT 0,
+  variation INTEGER NOT NULL DEFAULT 0,
+  rating TEXT,
+  notes TEXT NOT NULL DEFAULT ''
+);
 `);
 
 try {
@@ -82,6 +99,14 @@ export interface IStorage {
 
   getWeather(): Promise<Weather | undefined>;
   setWeather(w: InsertWeather): Promise<Weather>;
+
+  createSuggestion(s: InsertSuggestion): Promise<Suggestion>;
+  listSuggestions(limit?: number): Promise<Suggestion[]>;
+  getSuggestion(id: number): Promise<Suggestion | undefined>;
+  updateSuggestionRating(id: number, rating: Rating | null): Promise<Suggestion | undefined>;
+  updateSuggestionNotes(id: number, notes: string): Promise<Suggestion | undefined>;
+  deleteSuggestion(id: number): Promise<void>;
+  getRatedSuggestions(rating: Rating, limit?: number): Promise<Suggestion[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -149,6 +174,53 @@ export class DatabaseStorage implements IStorage {
     // Single-row pattern: replace existing
     db.delete(weather).run();
     return db.insert(weather).values(w).returning().get();
+  }
+
+  async createSuggestion(s: InsertSuggestion): Promise<Suggestion> {
+    return db
+      .insert(suggestions)
+      .values({ ...s, createdAt: Date.now() })
+      .returning()
+      .get();
+  }
+  async listSuggestions(limit = 100): Promise<Suggestion[]> {
+    return db
+      .select()
+      .from(suggestions)
+      .orderBy(desc(suggestions.createdAt))
+      .limit(limit)
+      .all();
+  }
+  async getSuggestion(id: number): Promise<Suggestion | undefined> {
+    return db.select().from(suggestions).where(eq(suggestions.id, id)).get();
+  }
+  async updateSuggestionRating(id: number, rating: Rating | null): Promise<Suggestion | undefined> {
+    return db
+      .update(suggestions)
+      .set({ rating })
+      .where(eq(suggestions.id, id))
+      .returning()
+      .get();
+  }
+  async updateSuggestionNotes(id: number, notes: string): Promise<Suggestion | undefined> {
+    return db
+      .update(suggestions)
+      .set({ notes })
+      .where(eq(suggestions.id, id))
+      .returning()
+      .get();
+  }
+  async deleteSuggestion(id: number): Promise<void> {
+    db.delete(suggestions).where(eq(suggestions.id, id)).run();
+  }
+  async getRatedSuggestions(rating: Rating, limit = 5): Promise<Suggestion[]> {
+    return db
+      .select()
+      .from(suggestions)
+      .where(eq(suggestions.rating, rating))
+      .orderBy(desc(suggestions.createdAt))
+      .limit(limit)
+      .all();
   }
 }
 

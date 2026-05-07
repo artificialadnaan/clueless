@@ -61,6 +61,35 @@ export const insertWearSchema = createInsertSchema(wears).omit({ id: true });
 export type InsertWear = z.infer<typeof insertWearSchema>;
 export type Wear = typeof wears.$inferSelect;
 
+// Suggestions — every distinct outfit the recommender returns. Lets users
+// rate, leave notes, and feed positive/negative examples back to the AI.
+export const RATINGS = ["up", "down"] as const;
+export type Rating = (typeof RATINGS)[number];
+
+export const suggestions = sqliteTable("suggestions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  createdAt: integer("created_at").notNull(),
+  formality: text("formality").notNull(),
+  source: text("source").notNull(), // 'ai' | 'rules'
+  aiProvider: text("ai_provider"),
+  aiModel: text("ai_model"),
+  itemIds: text("item_ids").notNull(), // JSON array
+  reasons: text("reasons").notNull().default("[]"), // JSON array of strings
+  score: integer("score").notNull().default(0), // *100 to keep integer
+  variation: integer("variation").notNull().default(0),
+  rating: text("rating"), // 'up' | 'down' | null
+  notes: text("notes").notNull().default(""),
+});
+
+export const insertSuggestionSchema = createInsertSchema(suggestions).omit({
+  id: true,
+  createdAt: true,
+  rating: true,
+  notes: true,
+});
+export type InsertSuggestion = z.infer<typeof insertSuggestionSchema>;
+export type Suggestion = typeof suggestions.$inferSelect;
+
 // Weather is stored as a single editable row. It can be synced from live weather
 // or manually overridden if the weather service cannot find the desired city.
 export const weather = sqliteTable("weather", {

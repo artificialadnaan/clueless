@@ -11,6 +11,8 @@ import { enrichImageWithVision, isVisionConfigured } from "./aiVision";
 import {
   insertItemSchema,
   insertWeatherSchema,
+  insertSuggestionSchema,
+  RATINGS,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -218,17 +220,65 @@ export async function registerRoutes(
     );
     if (!rec) return res.status(404).json({ error: "no recommendation" });
     if (req.query.ai === "1" || req.query.ai === "true") {
+      const [liked, disliked] = await Promise.all([
+        storage.getRatedSuggestions("up", 5),
+        storage.getRatedSuggestions("down", 5),
+      ]);
       const aiRec = await recommendOutfitWithAi(
         items,
         weather,
         recent,
         formality as "smart-casual" | "business" | "formal",
         rec,
-        variation
+        variation,
+        liked,
+        disliked
       );
       return res.json(aiRec);
     }
     res.json({ ...rec, source: "rules" });
+  });
+
+  app.post("/api/suggestions", async (req, res) => {
+    const parsed = insertSuggestionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const created = await storage.createSuggestion(parsed.data);
+    res.json(created);
+  });
+
+  app.get("/api/suggestions", async (req, res) => {
+    const limit = Math.min(500, Math.max(1, parseInt((req.query.limit as string) ?? "100", 10) || 100));
+    const list = await storage.listSuggestions(limit);
+    res.json(list);
+  });
+
+  app.patch("/api/suggestions/:id/rating", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+    const parsed = z
+      .object({ rating: z.enum(RATINGS).nullable() })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const updated = await storage.updateSuggestionRating(id, parsed.data.rating);
+    if (!updated) return res.status(404).json({ error: "not found" });
+    res.json(updated);
+  });
+
+  app.patch("/api/suggestions/:id/notes", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+    const parsed = z.object({ notes: z.string().max(500) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const updated = await storage.updateSuggestionNotes(id, parsed.data.notes);
+    if (!updated) return res.status(404).json({ error: "not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/suggestions/:id", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: "bad id" });
+    await storage.deleteSuggestion(id);
+    res.json({ ok: true });
   });
 
   // Stats: closet coverage, underused items, rotation

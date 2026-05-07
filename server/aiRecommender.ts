@@ -1,4 +1,4 @@
-import type { Item, Weather, Wear } from "@shared/schema";
+import type { Item, Weather, Wear, Suggestion } from "@shared/schema";
 import type { OutfitRecommendation } from "./recommender";
 
 type TargetFormality = "smart-casual" | "business" | "formal";
@@ -49,13 +49,30 @@ function recentItemIds(recentWears: Wear[]) {
   return Array.from(ids);
 }
 
+function summarizeSuggestion(s: Suggestion, byId: Map<number, Item>): string {
+  let ids: number[] = [];
+  try {
+    ids = JSON.parse(s.itemIds);
+  } catch {
+    return "";
+  }
+  const names = ids
+    .map((id) => byId.get(id))
+    .filter((i): i is Item => Boolean(i))
+    .map((i) => `${i.name} (${i.category})`);
+  const noteSuffix = s.notes ? ` — note: "${s.notes.slice(0, 80)}"` : "";
+  return `[${s.formality}] ${names.join(", ")}${noteSuffix}`;
+}
+
 function buildPrompt(
   items: Item[],
   weather: Weather,
   recentWears: Wear[],
   targetFormality: TargetFormality,
   fallback: OutfitRecommendation,
-  variation: number
+  variation: number,
+  liked: Suggestion[],
+  disliked: Suggestion[],
 ) {
   const compactItems = items.map((item) => ({
     id: item.id,
@@ -70,6 +87,10 @@ function buildPrompt(
     wearCount: item.wearCount,
     lastWornAt: item.lastWornAt,
   }));
+
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const likedSummaries = liked.map((s) => summarizeSuggestion(s, byId)).filter(Boolean);
+  const dislikedSummaries = disliked.map((s) => summarizeSuggestion(s, byId)).filter(Boolean);
 
   const variationHint =
     variation > 0
@@ -99,11 +120,15 @@ ${JSON.stringify(
     targetFormality,
     recentItemIds: recentItemIds(recentWears),
     rulesEngineBaselineIds: fallback.items.map((item) => item.id),
+    userLikedExamples: likedSummaries,
+    userDislikedExamples: dislikedSummaries,
     wardrobe: compactItems,
   },
   null,
   2
 )}
+
+If userLikedExamples is non-empty, lean toward similar combinations of category, color family, and formality register. If userDislikedExamples is non-empty, avoid producing a similar pairing.
 
 Return this exact JSON shape:
 {
@@ -232,7 +257,9 @@ export async function recommendOutfitWithAi(
   recentWears: Wear[],
   targetFormality: TargetFormality,
   fallback: OutfitRecommendation,
-  variation = 0
+  variation = 0,
+  liked: Suggestion[] = [],
+  disliked: Suggestion[] = []
 ): Promise<AiRecommendation> {
   const provider = configuredProvider();
   if (!provider) {
@@ -240,7 +267,16 @@ export async function recommendOutfitWithAi(
   }
 
   try {
-    const prompt = buildPrompt(items, weather, recentWears, targetFormality, fallback, variation);
+    const prompt = buildPrompt(
+      items,
+      weather,
+      recentWears,
+      targetFormality,
+      fallback,
+      variation,
+      liked,
+      disliked,
+    );
     const temperature = variation > 0 ? Math.min(0.9, 0.35 + variation * 0.1) : 0.35;
     const result =
       provider === "anthropic"

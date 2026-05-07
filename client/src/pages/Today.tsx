@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WeatherEditor } from "@/components/WeatherEditor";
 import { Sparkles, Check, RefreshCw, ShieldCheck, WandSparkles, Upload } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   Select,
@@ -54,6 +54,28 @@ export default function Today() {
   const REQUIRED = ["shirt", "pants", "shoes"] as const;
   const presentCategories = new Set(items.map((i) => i.category));
   const missingCategories = REQUIRED.filter((c) => !presentCategories.has(c));
+
+  const loggedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!rec || isError) return;
+    const key = `${formality}|${useAi}|${seed}`;
+    if (loggedRef.current.has(key)) return;
+    loggedRef.current.add(key);
+    apiRequest("POST", "/api/suggestions", {
+      formality,
+      source: rec.source ?? "rules",
+      aiProvider: rec.aiProvider ?? null,
+      aiModel: rec.aiModel ?? null,
+      itemIds: JSON.stringify(rec.items.map((i) => i.id)),
+      reasons: JSON.stringify(rec.reasons),
+      score: Math.round((rec.score ?? 0) * 100),
+      variation: seed,
+    })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/suggestions"] }))
+      .catch(() => {
+        // Don't surface logging errors to the user.
+      });
+  }, [rec, isError, formality, useAi, seed]);
 
   const markWorn = useMutation({
     mutationFn: async () => {
