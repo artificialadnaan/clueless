@@ -64,6 +64,18 @@ function summarizeSuggestion(s: Suggestion, byId: Map<number, Item>): string {
   return `[${s.formality}] ${names.join(", ")}${noteSuffix}`;
 }
 
+function recentlySuggestedItemIds(recent: Suggestion[]): number[] {
+  const set = new Set<number>();
+  for (const s of recent.slice(0, 8)) {
+    try {
+      JSON.parse(s.itemIds).forEach((id: number) => set.add(id));
+    } catch {
+      // Ignore malformed rows.
+    }
+  }
+  return Array.from(set);
+}
+
 function buildPrompt(
   items: Item[],
   weather: Weather,
@@ -73,6 +85,7 @@ function buildPrompt(
   variation: number,
   liked: Suggestion[],
   disliked: Suggestion[],
+  recentSuggestions: Suggestion[],
 ) {
   const compactItems = items.map((item) => ({
     id: item.id,
@@ -97,16 +110,20 @@ function buildPrompt(
       ? `\n\nThis is reshuffle #${variation}. The user has already seen prior suggestions for today; produce a meaningfully different combination. Pick a different shirt and a different shoes pair than the rules baseline below if reasonable alternatives exist.`
       : "";
 
-  return `You are a practical office wardrobe stylist. Choose exactly one coordinated outfit from the user's wardrobe.
+  return `You are an inventive personal stylist with strong taste. Choose one coordinated outfit from the user's wardrobe — favor variety and bold-but-tasteful pairings over playing it safe.
 
 Hard constraints:
 - Return JSON only, with no markdown.
 - Only use item ids that exist in the wardrobe.
 - Pick AT MOST ONE item per category. Required: exactly one shirt, one pants, one shoes. Optional: at most one socks, at most one watch, at most one accessory. Never include two items from the same category.
-- Avoid items worn recently when reasonable.
 - Respect weather suitability using each item's minTempF and maxTempF.
 - Avoid suede in rain or snow.
-- Match the requested dress code while keeping the outfit realistic for an office.${variationHint}
+- Match the requested dress code register, but interpret it liberally — different colors, textures, and combinations within the register are encouraged.
+
+Diversity expectations (soft):
+- Strongly avoid producing the same shirt or shoes as the recent suggestions in \`recentlySuggestedItemIds\`. The user has already seen those.
+- Push beyond the rules-engine baseline; the baseline is just a safe fallback. If you can find a more interesting combination that still matches the constraints, choose it.
+- Prefer items with low wearCount or that haven't appeared in recent suggestions.${variationHint}
 
 Context:
 ${JSON.stringify(
@@ -119,6 +136,7 @@ ${JSON.stringify(
     },
     targetFormality,
     recentItemIds: recentItemIds(recentWears),
+    recentlySuggestedItemIds: recentlySuggestedItemIds(recentSuggestions),
     rulesEngineBaselineIds: fallback.items.map((item) => item.id),
     userLikedExamples: likedSummaries,
     userDislikedExamples: dislikedSummaries,
@@ -259,7 +277,8 @@ export async function recommendOutfitWithAi(
   fallback: OutfitRecommendation,
   variation = 0,
   liked: Suggestion[] = [],
-  disliked: Suggestion[] = []
+  disliked: Suggestion[] = [],
+  recentSuggestions: Suggestion[] = []
 ): Promise<AiRecommendation> {
   const provider = configuredProvider();
   if (!provider) {
@@ -276,8 +295,10 @@ export async function recommendOutfitWithAi(
       variation,
       liked,
       disliked,
+      recentSuggestions,
     );
-    const temperature = variation > 0 ? Math.min(0.9, 0.35 + variation * 0.1) : 0.35;
+    const baseTemp = 0.7;
+    const temperature = Math.min(0.95, baseTemp + Math.min(variation, 3) * 0.07);
     const result =
       provider === "anthropic"
         ? await callAnthropic(prompt, temperature)

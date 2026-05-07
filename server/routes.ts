@@ -220,9 +220,10 @@ export async function registerRoutes(
     );
     if (!rec) return res.status(404).json({ error: "no recommendation" });
     if (req.query.ai === "1" || req.query.ai === "true") {
-      const [liked, disliked] = await Promise.all([
+      const [liked, disliked, recentSuggestions] = await Promise.all([
         storage.getRatedSuggestions("up", 5),
         storage.getRatedSuggestions("down", 5),
+        storage.listSuggestions(8),
       ]);
       const aiRec = await recommendOutfitWithAi(
         items,
@@ -232,7 +233,8 @@ export async function registerRoutes(
         rec,
         variation,
         liked,
-        disliked
+        disliked,
+        recentSuggestions
       );
       return res.json(aiRec);
     }
