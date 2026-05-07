@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Cloud, CloudRain, Snowflake, Sun, CloudSun, RefreshCw, Wifi } from "lucide-react";
+import { Cloud, CloudRain, Snowflake, Sun, CloudSun, RefreshCw, Wifi, MapPin } from "lucide-react";
 
 const CONDITIONS = [
   { value: "sunny", label: "Sunny", icon: Sun },
@@ -73,13 +73,51 @@ export function WeatherEditor() {
 
   useEffect(() => {
     if (hasAutoSynced) return;
-    const currentCity = weather?.city || "Chicago";
-    const isStale = !weather || Date.now() - weather.updatedAt > 60 * 60 * 1000;
-    if (isStale || weather?.city === "New York") {
+    if (!weather) return;
+    const isStale = Date.now() - weather.updatedAt > 60 * 60 * 1000;
+    if (isStale) {
       setHasAutoSynced(true);
-      refreshLive.mutate(currentCity === "New York" ? "Chicago" : currentCity);
+      refreshLive.mutate(weather.city);
     }
   }, [hasAutoSynced, refreshLive, weather]);
+
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation isn't supported by this browser.");
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
+          );
+          if (!res.ok) throw new Error("Reverse geocode failed");
+          const data = await res.json();
+          const detected =
+            data.city || data.locality || data.principalSubdivision || data.countryName;
+          if (!detected) throw new Error("Could not resolve a city from your location.");
+          setCity(detected);
+          refreshLive.mutate(detected);
+        } catch (e) {
+          setLocationError(e instanceof Error ? e.message : "Could not detect location.");
+        } finally {
+          setLocating(false);
+        }
+      },
+      (err) => {
+        setLocating(false);
+        setLocationError(err.message || "Permission denied or location unavailable.");
+      },
+      { timeout: 10000, maximumAge: 60 * 60 * 1000 },
+    );
+  };
 
   const Icon = CONDITIONS.find((c) => c.value === condition)?.icon ?? Cloud;
 
@@ -141,6 +179,16 @@ export function WeatherEditor() {
       </div>
       <Button
         className="mt-3 w-full"
+        onClick={detectLocation}
+        disabled={locating || refreshLive.isPending}
+        data-testid="button-detect-location"
+      >
+        <MapPin className={`size-4 ${locating ? "animate-pulse" : ""}`} />
+        {locating ? "Detecting your location…" : "Use my location"}
+      </Button>
+      <Button
+        className="mt-2 w-full"
+        variant="outline"
         onClick={() => save.mutate()}
         disabled={save.isPending}
         data-testid="button-save-weather"
@@ -157,6 +205,11 @@ export function WeatherEditor() {
         <RefreshCw className={`size-4 ${refreshLive.isPending ? "animate-spin" : ""}`} />
         {refreshLive.isPending ? "Refreshing live weather…" : "Refresh live weather"}
       </Button>
+      {locationError && (
+        <p className="mt-2 text-xs text-destructive" data-testid="text-location-error">
+          {locationError}
+        </p>
+      )}
       {refreshLive.isError && (
         <p className="mt-2 text-xs text-destructive" data-testid="text-weather-error">
           Live weather could not be pulled for that city. You can still enter it manually.
