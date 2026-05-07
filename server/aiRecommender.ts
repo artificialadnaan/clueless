@@ -54,7 +54,8 @@ function buildPrompt(
   weather: Weather,
   recentWears: Wear[],
   targetFormality: TargetFormality,
-  fallback: OutfitRecommendation
+  fallback: OutfitRecommendation,
+  variation: number
 ) {
   const compactItems = items.map((item) => ({
     id: item.id,
@@ -70,6 +71,11 @@ function buildPrompt(
     lastWornAt: item.lastWornAt,
   }));
 
+  const variationHint =
+    variation > 0
+      ? `\n\nThis is reshuffle #${variation}. The user has already seen prior suggestions for today; produce a meaningfully different combination. Pick a different shirt and a different shoes pair than the rules baseline below if reasonable alternatives exist.`
+      : "";
+
   return `You are a practical office wardrobe stylist. Choose exactly one coordinated outfit from the user's wardrobe.
 
 Hard constraints:
@@ -79,7 +85,7 @@ Hard constraints:
 - Avoid items worn recently when reasonable.
 - Respect weather suitability using each item's minTempF and maxTempF.
 - Avoid suede in rain or snow.
-- Match the requested dress code while keeping the outfit realistic for an office.
+- Match the requested dress code while keeping the outfit realistic for an office.${variationHint}
 
 Context:
 ${JSON.stringify(
@@ -120,7 +126,7 @@ function parseJsonChoice(text: string): ModelChoice {
   return JSON.parse(cleaned) as ModelChoice;
 }
 
-async function callOpenAi(prompt: string) {
+async function callOpenAi(prompt: string, temperature: number) {
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -139,7 +145,7 @@ async function callOpenAi(prompt: string) {
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.35,
+      temperature,
     }),
   });
 
@@ -153,7 +159,7 @@ async function callOpenAi(prompt: string) {
   };
 }
 
-async function callAnthropic(prompt: string) {
+async function callAnthropic(prompt: string, temperature: number) {
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -165,7 +171,7 @@ async function callAnthropic(prompt: string) {
     body: JSON.stringify({
       model,
       max_tokens: 700,
-      temperature: 0.35,
+      temperature,
       system:
         "You are a wardrobe inference engine. Return valid JSON only and never invent item ids.",
       messages: [{ role: "user", content: prompt }],
@@ -217,7 +223,8 @@ export async function recommendOutfitWithAi(
   weather: Weather,
   recentWears: Wear[],
   targetFormality: TargetFormality,
-  fallback: OutfitRecommendation
+  fallback: OutfitRecommendation,
+  variation = 0
 ): Promise<AiRecommendation> {
   const provider = configuredProvider();
   if (!provider) {
@@ -225,9 +232,12 @@ export async function recommendOutfitWithAi(
   }
 
   try {
-    const prompt = buildPrompt(items, weather, recentWears, targetFormality, fallback);
+    const prompt = buildPrompt(items, weather, recentWears, targetFormality, fallback, variation);
+    const temperature = variation > 0 ? Math.min(0.9, 0.35 + variation * 0.1) : 0.35;
     const result =
-      provider === "anthropic" ? await callAnthropic(prompt) : await callOpenAi(prompt);
+      provider === "anthropic"
+        ? await callAnthropic(prompt, temperature)
+        : await callOpenAi(prompt, temperature);
     const validated = validateChoice(result.choice, items);
     return {
       ...fallback,

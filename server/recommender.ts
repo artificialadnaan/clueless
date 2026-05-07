@@ -80,7 +80,8 @@ export function recommendOutfit(
   allItems: Item[],
   weather: Weather,
   recentWears: Wear[],
-  targetFormality: "smart-casual" | "business" | "formal" = "business"
+  targetFormality: "smart-casual" | "business" | "formal" = "business",
+  variation = 0
 ): OutfitRecommendation | null {
   const now = Date.now();
   const targetRank = formalityRank(targetFormality);
@@ -110,29 +111,29 @@ export function recommendOutfit(
     return s;
   };
 
-  const pickBest = (
+  const pickAt = (
     cat: string,
     partners: Item[] = [],
-    count = 1
-  ): Item[] => {
+    offset = 0
+  ): Item | undefined => {
     const candidates = allItems
       .filter((i) => i.category === cat)
       .map((i) => ({ i, s: score(i, partners) }))
       .sort((a, b) => b.s - a.s);
-    return candidates.slice(0, count).map((c) => c.i);
+    if (candidates.length === 0) return undefined;
+    return candidates[offset % candidates.length].i;
   };
 
-  const shirt = pickBest("shirt")[0];
+  // Spread variation across shirt/pants/shoes so reshuffle cycles meaningful changes.
+  const shirt = pickAt("shirt", [], variation);
   if (!shirt) return null;
-  const pants = pickBest("pants", [shirt])[0];
+  const pants = pickAt("pants", [shirt], Math.floor(variation / 3));
   if (!pants) return null;
-  const shoes = pickBest("shoes", [shirt, pants])[0];
+  const shoes = pickAt("shoes", [shirt, pants], Math.floor(variation / 7));
   if (!shoes) return null;
-  const socks = pickBest("socks", [pants, shoes])[0];
-  const watch = pickBest("watch", [shirt])[0];
-
-  // Choose ONE accessory that complements (belt or tie)
-  const accessory = pickBest("accessory", [shirt, pants, shoes])[0];
+  const socks = pickAt("socks", [pants, shoes], variation);
+  const watch = pickAt("watch", [shirt], variation);
+  const accessory = pickAt("accessory", [shirt, pants, shoes], variation);
 
   const chosen: Item[] = [shirt, pants, shoes];
   if (socks) chosen.push(socks);

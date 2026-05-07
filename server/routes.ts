@@ -208,11 +208,13 @@ export async function registerRoutes(
     const recent = await storage.getRecentWears(10);
     if (!weather) return res.status(400).json({ error: "no weather" });
     const formality = (req.query.formality as string) || "business";
+    const variation = Math.max(0, parseInt((req.query._ as string) ?? "0", 10) || 0);
     const rec = recommendOutfit(
       items,
       weather,
       recent,
-      formality as "smart-casual" | "business" | "formal"
+      formality as "smart-casual" | "business" | "formal",
+      variation
     );
     if (!rec) return res.status(404).json({ error: "no recommendation" });
     if (req.query.ai === "1" || req.query.ai === "true") {
@@ -221,7 +223,8 @@ export async function registerRoutes(
         weather,
         recent,
         formality as "smart-casual" | "business" | "formal",
-        rec
+        rec,
+        variation
       );
       return res.json(aiRec);
     }
