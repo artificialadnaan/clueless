@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS items (
   min_temp_f INTEGER NOT NULL DEFAULT 20,
   max_temp_f INTEGER NOT NULL DEFAULT 100,
   notes TEXT NOT NULL DEFAULT '',
+  image_path TEXT,
   wear_count INTEGER NOT NULL DEFAULT 0,
   last_worn_at INTEGER,
   created_at INTEGER NOT NULL
@@ -57,6 +58,12 @@ CREATE TABLE IF NOT EXISTS weather (
   updated_at INTEGER NOT NULL
 );
 `);
+
+try {
+  sqlite.exec("ALTER TABLE items ADD COLUMN image_path TEXT");
+} catch {
+  // column already exists
+}
 
 export const db = drizzle(sqlite);
 

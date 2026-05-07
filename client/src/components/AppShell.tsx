@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Logo } from "./Logo";
-import { LayoutDashboard, Shirt, Sparkles, Sun, Moon, Cloud } from "lucide-react";
+import { LayoutDashboard, Shirt, Sparkles, Sun, Moon, Cloud, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -17,6 +17,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/", label: "Today", icon: Sparkles, testId: "nav-today" },
   { href: "/wardrobe", label: "Wardrobe", icon: Shirt, testId: "nav-wardrobe" },
+  { href: "/import", label: "Import", icon: Upload, testId: "nav-import" },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "nav-dashboard" },
 ];
 

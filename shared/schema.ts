@@ -30,6 +30,7 @@ export const items = sqliteTable("items", {
   minTempF: integer("min_temp_f").notNull().default(20),
   maxTempF: integer("max_temp_f").notNull().default(100),
   notes: text("notes").notNull().default(""),
+  imagePath: text("image_path"),
   wearCount: integer("wear_count").notNull().default(0),
   lastWornAt: integer("last_worn_at"), // unix ms
   createdAt: integer("created_at").notNull(),

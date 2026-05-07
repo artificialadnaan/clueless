@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Today from "@/pages/Today";
 import Wardrobe from "@/pages/Wardrobe";
 import Dashboard from "@/pages/Dashboard";
+import Import from "@/pages/Import";
 import { AppShell } from "@/components/AppShell";
 
 function AppRouter() {
@@ -16,6 +17,7 @@ function AppRouter() {
       <Route path="/" component={Today} />
       <Route path="/wardrobe" component={Wardrobe} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/import" component={Import} />
       <Route component={NotFound} />
     </Switch>
   );

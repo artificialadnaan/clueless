@@ -1,15 +1,23 @@
 import type { Express } from "express";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
+import multer from "multer";
 import { storage } from "./storage";
 import { seedIfEmpty } from "./seed";
 import { recommendOutfit } from "./recommender";
 import { getAiStatus, recommendOutfitWithAi } from "./aiRecommender";
+import { saveImage, isAllowedMime, streamImage } from "./imageStore";
+import { enrichImageWithVision, isVisionConfigured } from "./aiVision";
 import {
   insertItemSchema,
   insertWeatherSchema,
 } from "@shared/schema";
 import { z } from "zod";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 50 },
+});
 
 function mapWeatherCode(code: number): "sunny" | "cloudy" | "partly-cloudy" | "rain" | "snow" {
   if (code === 0) return "sunny";
@@ -88,6 +96,53 @@ export async function registerRoutes(
     }
     const item = await storage.createItem(parsed.data);
     res.json(item);
+  });
+
+  app.post(
+    "/api/items/import",
+    upload.array("photos", 50),
+    async (req, res) => {
+      if (!isVisionConfigured()) {
+        return res.status(400).json({
+          error:
+            "ANTHROPIC_API_KEY not configured. Set it in environment to enable AI item import.",
+        });
+      }
+      const files = (req.files as Express.Multer.File[]) || [];
+      if (files.length === 0) return res.status(400).json({ error: "no files" });
+
+      const created: Array<{ filename: string; item: any }> = [];
+      const failed: Array<{ filename: string; error: string }> = [];
+
+      for (const file of files) {
+        try {
+          if (!isAllowedMime(file.mimetype)) {
+            throw new Error(`unsupported mime type: ${file.mimetype}`);
+          }
+          const enriched = await enrichImageWithVision(file.buffer, file.mimetype);
+          const { filename } = saveImage(file.buffer, file.mimetype);
+          const item = await storage.createItem({
+            ...enriched.fields,
+            imagePath: filename,
+          });
+          created.push({ filename: file.originalname, item });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "unknown error";
+          failed.push({ filename: file.originalname, error: message });
+        }
+      }
+
+      res.json({ created, failed });
+    },
+  );
+
+  app.get("/api/images/:filename", (req, res) => {
+    const result = streamImage(req.params.filename);
+    if (!result) return res.status(404).json({ error: "not found" });
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader("Content-Length", String(result.size));
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    result.stream.pipe(res);
   });
 
   app.delete("/api/items/:id", async (req, res) => {

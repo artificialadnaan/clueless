@@ -100,6 +100,16 @@ function AccessorySilhouette({ fill, name }: { fill: string; name: string }) {
 }
 
 export function ItemThumb({ item }: { item: Item }) {
+  if (item.imagePath) {
+    return (
+      <img
+        src={`/api/images/${item.imagePath}`}
+        alt={item.name}
+        className="w-full h-full object-cover"
+        loading="lazy"
+      />
+    );
+  }
   const fill = item.colorHex;
   const props = { fill };
   switch (item.category) {
