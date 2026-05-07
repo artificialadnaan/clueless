@@ -32,7 +32,7 @@ Category guidance:
 
 Temperature guidance: heavy wool ~20-55F, light cotton ~55-95F, shorts ~70-100F, default 20-100F if unclear.`;
 
-const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL || "claude-3-5-sonnet-latest";
+const VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL || "claude-haiku-4-5-20251001";
 
 interface RawVisionFields {
   name?: unknown;
