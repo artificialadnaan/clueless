@@ -1,7 +1,6 @@
 import type { Item, Weather, Wear, Suggestion } from "@shared/schema";
-import type { OutfitRecommendation } from "./recommender";
+import { OUTFIT_STYLE_LABELS, type OutfitRecommendation, type OutfitStyle } from "./recommender";
 
-type TargetFormality = "smart-casual" | "business" | "formal";
 type AiProvider = "openai" | "anthropic";
 
 interface AiRecommendation extends OutfitRecommendation {
@@ -90,7 +89,7 @@ function buildPrompt(
   items: Item[],
   weather: Weather,
   recentWears: Wear[],
-  targetFormality: TargetFormality,
+  targetFormality: OutfitStyle,
   fallback: OutfitRecommendation,
   variation: number,
   liked: Suggestion[],
@@ -131,7 +130,7 @@ Hard constraints:
 - If lockedSeedItem is present, its id MUST be included and it is already chosen for its category. Choose the remaining categories around it.
 - Respect weather suitability using each item's minTempF and maxTempF.
 - Avoid suede in rain or snow.
-- Match the requested dress code register, but interpret it liberally — different colors, textures, and combinations within the register are encouraged.
+- Match the requested style intent, but interpret it through the wardrobe the user actually owns. A casual or travel request can still use business attire; choose the least stiff combination available.
 
 Diversity expectations (soft):
 - For EVERY category — shirt, pants, shoes, watch, socks, accessory — prefer items NOT listed in \`recentlySuggestedByCategory\`. If a category has more than one option in the wardrobe, do not repeat the same one across consecutive suggestions.
@@ -149,6 +148,7 @@ ${JSON.stringify(
       city: weather.city,
     },
     targetFormality,
+    styleLabel: OUTFIT_STYLE_LABELS[targetFormality],
     recentItemIds: recentItemIds(recentWears),
     recentlySuggestedByCategory: recentlySuggestedByCategory(recentSuggestions, byId),
     rulesEngineBaselineIds: fallback.items.map((item) => item.id),
@@ -171,6 +171,16 @@ ${JSON.stringify(
 )}
 
 If userLikedExamples is non-empty, lean toward similar combinations of category, color family, and formality register. If userDislikedExamples is non-empty, avoid producing a similar pairing.
+
+Style interpretation:
+- Casual: relaxed, least formal workable pieces, no unnecessary office stiffness.
+- Smart casual: polished but not full office.
+- Business casual: work-ready but softer than standard business.
+- Business: structured and office-ready.
+- Formal: most elevated and event-ready.
+- Evening: darker, intentional, less daytime-office.
+- Travel: comfort, walkability, weather range, low fuss.
+- Statement: one stronger piece leads while the rest stays restrained.
 
 Return this exact JSON shape:
 {
@@ -301,7 +311,7 @@ export async function recommendOutfitWithAi(
   items: Item[],
   weather: Weather,
   recentWears: Wear[],
-  targetFormality: TargetFormality,
+  targetFormality: OutfitStyle,
   fallback: OutfitRecommendation,
   variation = 0,
   liked: Suggestion[] = [],

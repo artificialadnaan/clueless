@@ -206,7 +206,7 @@ function ItemCard({ item }: { item: Item }) {
             className="size-7 rounded text-muted-foreground"
           >
             <Link
-              href={`/?seedItemId=${item.id}`}
+              href={`/from/${item.id}`}
               aria-label="Build outfit from this item"
               data-testid={`button-build-outfit-${item.id}`}
             >

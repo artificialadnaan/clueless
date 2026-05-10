@@ -1,5 +1,80 @@
 import type { Item, Weather, Wear } from "@shared/schema";
 
+export const OUTFIT_STYLES = [
+  "casual",
+  "smart-casual",
+  "business-casual",
+  "business",
+  "formal",
+  "evening",
+  "travel",
+  "statement",
+] as const;
+
+export type OutfitStyle = (typeof OUTFIT_STYLES)[number];
+
+export const OUTFIT_STYLE_LABELS: Record<OutfitStyle, string> = {
+  casual: "Casual",
+  "smart-casual": "Smart casual",
+  "business-casual": "Business casual",
+  business: "Business",
+  formal: "Formal",
+  evening: "Evening",
+  travel: "Travel / comfort",
+  statement: "Statement",
+};
+
+type CoreFormality = "casual" | "smart-casual" | "business" | "formal";
+
+const STYLE_PROFILES: Record<
+  OutfitStyle,
+  {
+    targetFormality: CoreFormality;
+    reason: string;
+  }
+> = {
+  casual: {
+    targetFormality: "casual",
+    reason:
+      "Casual mode relaxes the business wardrobe by choosing the least formal workable pieces and keeping the outfit easygoing.",
+  },
+  "smart-casual": {
+    targetFormality: "smart-casual",
+    reason:
+      "Smart casual keeps the outfit polished without making it feel like a full office uniform.",
+  },
+  "business-casual": {
+    targetFormality: "smart-casual",
+    reason:
+      "Business casual uses work-ready pieces with a softer register than the standard business outfit.",
+  },
+  business: {
+    targetFormality: "business",
+    reason:
+      "Business mode prioritizes structured, office-ready pieces with restrained color coordination.",
+  },
+  formal: {
+    targetFormality: "formal",
+    reason:
+      "Formal mode pulls the most elevated pieces into a sharper, event-ready register.",
+  },
+  evening: {
+    targetFormality: "business",
+    reason:
+      "Evening mode leans darker and more intentional, using the wardrobe's dressier pieces without feeling daytime-office.",
+  },
+  travel: {
+    targetFormality: "smart-casual",
+    reason:
+      "Travel mode favors comfort, broader temperature range, and pieces that can move from transit to casual plans.",
+  },
+  statement: {
+    targetFormality: "business",
+    reason:
+      "Statement mode lets one stronger color or texture lead while the rest of the outfit stays restrained.",
+  },
+};
+
 // Color theory: simple HSL-distance based "neutrality" + complementary pairing
 function hexToHsl(hex: string): { h: number; s: number; l: number } {
   const m = hex.replace("#", "").match(/.{1,2}/g);
@@ -50,6 +125,34 @@ function formalityRank(f: string): number {
   return { casual: 0, "smart-casual": 1, business: 2, formal: 3 }[f] ?? 1;
 }
 
+function normalizeStyle(style: string): OutfitStyle {
+  return OUTFIT_STYLES.includes(style as OutfitStyle)
+    ? (style as OutfitStyle)
+    : "business";
+}
+
+function styleFit(item: Item, style: OutfitStyle): number {
+  const rank = formalityRank(item.formality);
+  const hsl = hexToHsl(item.colorHex);
+  if (style === "casual") {
+    return rank === 0 ? 0.3 : rank === 1 ? 0.16 : rank === 2 ? 0.04 : -0.18;
+  }
+  if (style === "business-casual") {
+    return rank === 1 ? 0.18 : rank === 2 ? 0.1 : rank === 0 ? 0.04 : -0.08;
+  }
+  if (style === "evening") {
+    return (hsl.l < 0.42 ? 0.16 : -0.04) + (rank >= 2 ? 0.08 : 0);
+  }
+  if (style === "travel") {
+    const tempRange = item.maxTempF - item.minTempF;
+    return Math.min(0.18, tempRange / 500) - (rank === 3 ? 0.12 : 0);
+  }
+  if (style === "statement") {
+    return hsl.s > 0.35 ? 0.18 : 0;
+  }
+  return 0;
+}
+
 function tempFitsItem(temp: number, item: Item): number {
   if (temp >= item.minTempF && temp <= item.maxTempF) return 1.0;
   const overshoot = Math.min(
@@ -80,12 +183,14 @@ export function recommendOutfit(
   allItems: Item[],
   weather: Weather,
   recentWears: Wear[],
-  targetFormality: "smart-casual" | "business" | "formal" = "business",
+  style: OutfitStyle = "business",
   variation = 0,
   seedItemId?: number
 ): OutfitRecommendation | null {
+  const targetStyle = normalizeStyle(style);
+  const profile = STYLE_PROFILES[targetStyle];
   const now = Date.now();
-  const targetRank = formalityRank(targetFormality);
+  const targetRank = formalityRank(profile.targetFormality);
   const seedItem = seedItemId ? allItems.find((item) => item.id === seedItemId) : undefined;
 
   // helper: filter items by category and score them
@@ -96,6 +201,7 @@ export function recommendOutfit(
     // Formality match
     const fr = formalityRank(item.formality);
     s -= Math.abs(fr - targetRank) * 0.15;
+    s += styleFit(item, targetStyle);
     // Color harmony with partners
     if (partners.length) {
       const harm =
@@ -161,6 +267,8 @@ export function recommendOutfit(
     );
   }
 
+  reasons.push(profile.reason);
+
   // Color harmony reason
   const palette = Array.from(new Set(chosen.map((c) => c.color))).slice(0, 3).join(", ");
   reasons.push(
@@ -198,7 +306,7 @@ export function recommendOutfit(
 
   // Formality
   reasons.push(
-    `Aimed at a ${targetFormality} dress code: ${shirt.formality} shirt, ${pants.formality} trousers, and ${shoes.formality} shoes work as a coherent register.`
+    `Aimed at ${OUTFIT_STYLE_LABELS[targetStyle]}: ${shirt.formality} shirt, ${pants.formality} trousers, and ${shoes.formality} shoes work as a coherent register.`
   );
 
   if (
@@ -215,6 +323,6 @@ export function recommendOutfit(
     reasons,
     weather,
     score: total,
-    targetFormality,
+    targetFormality: targetStyle,
   };
 }

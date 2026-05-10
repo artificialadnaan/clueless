@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import multer from "multer";
 import { storage } from "./storage";
 import { seedIfEmpty } from "./seed";
-import { recommendOutfit } from "./recommender";
+import { OUTFIT_STYLES, recommendOutfit, type OutfitStyle } from "./recommender";
 import { getAiStatus, recommendOutfitWithAi } from "./aiRecommender";
 import { saveImage, isAllowedMime, streamImage } from "./imageStore";
 import { enrichImageWithVision, isVisionConfigured } from "./aiVision";
@@ -286,7 +286,10 @@ export async function registerRoutes(
     const weather = await storage.getWeather();
     const recent = await storage.getRecentWears(10);
     if (!weather) return res.status(400).json({ error: "no weather" });
-    const formality = (req.query.formality as string) || "business";
+    const rawStyle = (req.query.formality as string) || (req.query.style as string) || "business";
+    const formality = OUTFIT_STYLES.includes(rawStyle as OutfitStyle)
+      ? (rawStyle as OutfitStyle)
+      : "business";
     const variation = Math.max(0, parseInt((req.query._ as string) ?? "0", 10) || 0);
     const parsedSeedItemId = parseInt((req.query.seedItemId as string) ?? "", 10);
     const seedItemId = Number.isFinite(parsedSeedItemId) ? parsedSeedItemId : undefined;
@@ -294,7 +297,7 @@ export async function registerRoutes(
       items,
       weather,
       recent,
-      formality as "smart-casual" | "business" | "formal",
+      formality,
       variation,
       seedItemId
     );
@@ -309,7 +312,7 @@ export async function registerRoutes(
         items,
         weather,
         recent,
-        formality as "smart-casual" | "business" | "formal",
+        formality,
         rec,
         variation,
         liked,

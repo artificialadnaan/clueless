@@ -16,6 +16,7 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={Today} />
+      <Route path="/from/:seedItemId" component={Today} />
       <Route path="/wardrobe" component={Wardrobe} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/import" component={Import} />

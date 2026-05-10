@@ -29,6 +29,21 @@ interface Recommendation {
   aiError?: string;
 }
 
+const STYLE_OPTIONS = [
+  { value: "casual", label: "Casual" },
+  { value: "smart-casual", label: "Smart casual" },
+  { value: "business-casual", label: "Business casual" },
+  { value: "business", label: "Business" },
+  { value: "formal", label: "Formal" },
+  { value: "evening", label: "Evening" },
+  { value: "travel", label: "Travel / comfort" },
+  { value: "statement", label: "Statement" },
+];
+
+function styleLabel(value: string) {
+  return STYLE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
 export default function Today() {
   const [formality, setFormality] = useState<string>("business");
   const [seed, setSeed] = useState(0);
@@ -36,7 +51,9 @@ export default function Today() {
   const [location] = useLocation();
   const { toast } = useToast();
   const query = location.includes("?") ? location.split("?")[1] : "";
-  const seedItemId = new URLSearchParams(query).get("seedItemId");
+  const querySeedItemId = new URLSearchParams(query).get("seedItemId");
+  const pathSeedItemId = location.match(/^\/from\/(\d+)$/)?.[1];
+  const seedItemId = pathSeedItemId ?? querySeedItemId;
 
   const { data: rec, isLoading, isError, refetch } = useQuery<Recommendation>({
     queryKey: ["/api/recommend", { formality, seed, useAi, seedItemId }],
@@ -143,13 +160,15 @@ export default function Today() {
             {useAi ? "AI stylist on" : "Rules engine"}
           </Button>
           <Select value={formality} onValueChange={setFormality}>
-            <SelectTrigger className="w-44" data-testid="select-formality">
-              <SelectValue placeholder="Dress code" />
+            <SelectTrigger className="w-48" data-testid="select-formality">
+              <SelectValue placeholder="Style" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="smart-casual">Smart casual</SelectItem>
-              <SelectItem value="business">Business</SelectItem>
-              <SelectItem value="formal">Formal</SelectItem>
+              {STYLE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Button
@@ -196,7 +215,7 @@ export default function Today() {
                     : "Rules engine"}
                 </Badge>
                 <Badge variant="outline" className="capitalize" data-testid="badge-formality">
-                  {rec.targetFormality.replace("-", " ")}
+                  {styleLabel(rec.targetFormality)}
                 </Badge>
               </div>
             )}
@@ -222,7 +241,7 @@ export default function Today() {
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Couldn't build an outfit for {formality.replace("-", " ")} at today's weather. Try a different dress code or reshuffle.
+                  Couldn't build an outfit for {styleLabel(formality)} at today's weather. Try a different style or reshuffle.
                 </p>
               )}
               <div className="mt-4 flex flex-wrap gap-2 justify-center">

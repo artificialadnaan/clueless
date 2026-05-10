@@ -360,7 +360,7 @@ export function ItemDetailDialog({ item, open, onOpenChange }: Props) {
 
         <DialogFooter className="mt-4">
           <Button asChild variant="default">
-            <Link href={`/?seedItemId=${item.id}`}>
+            <Link href={`/from/${item.id}`}>
               <Sparkles className="size-4" />
               Build outfit from this
             </Link>

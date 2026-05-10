@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { Item, Weather } from "@shared/schema";
-import { recommendOutfit } from "./recommender";
+import { OUTFIT_STYLES, recommendOutfit } from "./recommender";
 
 const baseItem = {
   season: "all",
@@ -100,4 +100,23 @@ assert.ok(
 assert.ok(
   seeded.reasons.some((reason) => reason.includes(seedShirt.name)),
   "seeded recommendation should explain the locked item",
+);
+
+assert.deepEqual(OUTFIT_STYLES, [
+  "casual",
+  "smart-casual",
+  "business-casual",
+  "business",
+  "formal",
+  "evening",
+  "travel",
+  "statement",
+]);
+
+const travel = recommendOutfit(items, weather, [], "travel", 0);
+assert.ok(travel, "expected travel style recommendation");
+assert.equal(travel.targetFormality, "travel");
+assert.ok(
+  travel.reasons.some((reason) => /travel/i.test(reason)),
+  "travel recommendations should explain the style intent",
 );
