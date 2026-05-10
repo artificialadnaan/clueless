@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Loader2, Trash2, Sparkles, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface Props {
   item: Item;
@@ -358,6 +359,12 @@ export function ItemDetailDialog({ item, open, onOpenChange }: Props) {
         </div>
 
         <DialogFooter className="mt-4">
+          <Button asChild variant="default">
+            <Link href={`/?seedItemId=${item.id}`}>
+              <Sparkles className="size-4" />
+              Build outfit from this
+            </Link>
+          </Button>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Close
           </Button>

@@ -81,10 +81,12 @@ export function recommendOutfit(
   weather: Weather,
   recentWears: Wear[],
   targetFormality: "smart-casual" | "business" | "formal" = "business",
-  variation = 0
+  variation = 0,
+  seedItemId?: number
 ): OutfitRecommendation | null {
   const now = Date.now();
   const targetRank = formalityRank(targetFormality);
+  const seedItem = seedItemId ? allItems.find((item) => item.id === seedItemId) : undefined;
 
   // helper: filter items by category and score them
   const score = (item: Item, partners: Item[] = []): number => {
@@ -116,6 +118,7 @@ export function recommendOutfit(
     partners: Item[] = [],
     offset = 0
   ): Item | undefined => {
+    if (seedItem?.category === cat) return seedItem;
     const candidates = allItems
       .filter((i) => i.category === cat)
       .map((i) => ({ i, s: score(i, partners) }))
@@ -135,13 +138,28 @@ export function recommendOutfit(
   const watch = pickAt("watch", [shirt], variation);
   const accessory = pickAt("accessory", [shirt, pants, shoes], variation);
 
-  const chosen: Item[] = [shirt, pants, shoes];
-  if (socks) chosen.push(socks);
-  if (watch) chosen.push(watch);
-  if (accessory) chosen.push(accessory);
+  const chosen: Item[] = [];
+  const addChosen = (item: Item | undefined) => {
+    if (item && !chosen.some((candidate) => candidate.id === item.id)) {
+      chosen.push(item);
+    }
+  };
+
+  addChosen(shirt);
+  addChosen(pants);
+  addChosen(shoes);
+  addChosen(socks);
+  addChosen(watch);
+  addChosen(accessory);
 
   // Generate reasons
   const reasons: string[] = [];
+
+  if (seedItem && chosen.some((item) => item.id === seedItem.id)) {
+    reasons.push(
+      `Locked in ${seedItem.name} and built the remaining pieces around its ${seedItem.color} color and ${seedItem.formality} register.`
+    );
+  }
 
   // Color harmony reason
   const palette = Array.from(new Set(chosen.map((c) => c.color))).slice(0, 3).join(", ");

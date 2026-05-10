@@ -7,8 +7,9 @@ import { ItemThumb } from "@/components/ItemThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Pencil } from "lucide-react";
+import { Plus, Search, Trash2, Pencil, Sparkles } from "lucide-react";
 import { ItemDetailDialog } from "@/components/ItemDetailDialog";
+import { Link } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -198,6 +199,20 @@ function ItemCard({ item }: { item: Item }) {
           </div>
         </div>
         <div className="shrink-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="size-7 rounded text-muted-foreground"
+          >
+            <Link
+              href={`/?seedItemId=${item.id}`}
+              aria-label="Build outfit from this item"
+              data-testid={`button-build-outfit-${item.id}`}
+            >
+              <Sparkles className="size-3.5" />
+            </Link>
+          </Button>
           <button
             aria-label="Edit item"
             className="size-7 rounded text-muted-foreground hover-elevate flex items-center justify-center"

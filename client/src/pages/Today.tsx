@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { WeatherEditor } from "@/components/WeatherEditor";
 import { Sparkles, Check, RefreshCw, ShieldCheck, WandSparkles, Upload } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Select,
   SelectContent,
@@ -33,15 +33,24 @@ export default function Today() {
   const [formality, setFormality] = useState<string>("business");
   const [seed, setSeed] = useState(0);
   const [useAi, setUseAi] = useState(true);
+  const [location] = useLocation();
   const { toast } = useToast();
+  const query = location.includes("?") ? location.split("?")[1] : "";
+  const seedItemId = new URLSearchParams(query).get("seedItemId");
 
   const { data: rec, isLoading, isError, refetch } = useQuery<Recommendation>({
-    queryKey: ["/api/recommend", { formality, seed, useAi }],
+    queryKey: ["/api/recommend", { formality, seed, useAi, seedItemId }],
     retry: false,
     queryFn: async () => {
+      const params = new URLSearchParams({
+        formality,
+        ai: useAi ? "1" : "0",
+        _: String(seed),
+      });
+      if (seedItemId) params.set("seedItemId", seedItemId);
       const res = await apiRequest(
         "GET",
-        `/api/recommend?formality=${formality}&ai=${useAi ? "1" : "0"}&_=${seed}`
+        `/api/recommend?${params.toString()}`
       );
       return res.json();
     },
@@ -54,11 +63,14 @@ export default function Today() {
   const REQUIRED = ["shirt", "pants", "shoes"] as const;
   const presentCategories = new Set(items.map((i) => i.category));
   const missingCategories = REQUIRED.filter((c) => !presentCategories.has(c));
+  const lockedItem = seedItemId
+    ? items.find((item) => item.id === Number(seedItemId))
+    : undefined;
 
   const loggedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!rec || isError) return;
-    const key = `${formality}|${useAi}|${seed}`;
+    const key = `${formality}|${useAi}|${seed}|${seedItemId ?? ""}`;
     if (loggedRef.current.has(key)) return;
     loggedRef.current.add(key);
     apiRequest("POST", "/api/suggestions", {
@@ -75,7 +87,7 @@ export default function Today() {
       .catch(() => {
         // Don't surface logging errors to the user.
       });
-  }, [rec, isError, formality, useAi, seed]);
+  }, [rec, isError, formality, useAi, seed, seedItemId]);
 
   const markWorn = useMutation({
     mutationFn: async () => {
@@ -116,8 +128,9 @@ export default function Today() {
             Good morning, Adnaan.
           </h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            A coordinated outfit, built for today's weather and rotated against your
-            recent wears.
+            {lockedItem
+              ? `Starting with ${lockedItem.name}, then completing the rest around today's weather and your rotation.`
+              : "A coordinated outfit, built for today's weather and rotated against your recent wears."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -170,6 +183,11 @@ export default function Today() {
             </div>
             {rec && (
               <div className="flex items-center gap-2">
+                {lockedItem && (
+                  <Badge variant="outline" className="capitalize" data-testid="badge-locked-item">
+                    Locked: {lockedItem.category}
+                  </Badge>
+                )}
                 <Badge variant="outline" className="capitalize" data-testid="badge-recommendation-source">
                   {rec.source === "ai"
                     ? `${rec.aiProvider ?? "AI"} stylist`

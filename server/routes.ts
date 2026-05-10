@@ -288,12 +288,15 @@ export async function registerRoutes(
     if (!weather) return res.status(400).json({ error: "no weather" });
     const formality = (req.query.formality as string) || "business";
     const variation = Math.max(0, parseInt((req.query._ as string) ?? "0", 10) || 0);
+    const parsedSeedItemId = parseInt((req.query.seedItemId as string) ?? "", 10);
+    const seedItemId = Number.isFinite(parsedSeedItemId) ? parsedSeedItemId : undefined;
     const rec = recommendOutfit(
       items,
       weather,
       recent,
       formality as "smart-casual" | "business" | "formal",
-      variation
+      variation,
+      seedItemId
     );
     if (!rec) return res.status(404).json({ error: "no recommendation" });
     if (req.query.ai === "1" || req.query.ai === "true") {
@@ -311,7 +314,8 @@ export async function registerRoutes(
         variation,
         liked,
         disliked,
-        recentSuggestions
+        recentSuggestions,
+        seedItemId
       );
       return res.json(aiRec);
     }

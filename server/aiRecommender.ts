@@ -96,6 +96,7 @@ function buildPrompt(
   liked: Suggestion[],
   disliked: Suggestion[],
   recentSuggestions: Suggestion[],
+  seedItemId?: number,
 ) {
   const compactItems = items.map((item) => ({
     id: item.id,
@@ -114,6 +115,7 @@ function buildPrompt(
   const byId = new Map(items.map((item) => [item.id, item]));
   const likedSummaries = liked.map((s) => summarizeSuggestion(s, byId)).filter(Boolean);
   const dislikedSummaries = disliked.map((s) => summarizeSuggestion(s, byId)).filter(Boolean);
+  const seedItem = seedItemId ? byId.get(seedItemId) : undefined;
 
   const variationHint =
     variation > 0
@@ -126,6 +128,7 @@ Hard constraints:
 - Return JSON only, with no markdown.
 - Only use item ids that exist in the wardrobe.
 - Pick AT MOST ONE item per category. Required: exactly one shirt, one pants, one shoes. Optional: at most one socks, at most one watch, at most one accessory. Never include two items from the same category.
+- If lockedSeedItem is present, its id MUST be included and it is already chosen for its category. Choose the remaining categories around it.
 - Respect weather suitability using each item's minTempF and maxTempF.
 - Avoid suede in rain or snow.
 - Match the requested dress code register, but interpret it liberally — different colors, textures, and combinations within the register are encouraged.
@@ -149,6 +152,16 @@ ${JSON.stringify(
     recentItemIds: recentItemIds(recentWears),
     recentlySuggestedByCategory: recentlySuggestedByCategory(recentSuggestions, byId),
     rulesEngineBaselineIds: fallback.items.map((item) => item.id),
+    lockedSeedItem: seedItem
+      ? {
+          id: seedItem.id,
+          name: seedItem.name,
+          category: seedItem.category,
+          color: seedItem.color,
+          formality: seedItem.formality,
+          notes: seedItem.notes,
+        }
+      : null,
     userLikedExamples: likedSummaries,
     userDislikedExamples: dislikedSummaries,
     wardrobe: compactItems,
@@ -243,7 +256,7 @@ async function callAnthropic(prompt: string, temperature: number) {
   };
 }
 
-function validateChoice(choice: ModelChoice, items: Item[]) {
+function validateChoice(choice: ModelChoice, items: Item[], seedItemId?: number) {
   if (!Array.isArray(choice.selectedItemIds) || !Array.isArray(choice.reasons)) {
     throw new Error("AI response missing selectedItemIds or reasons");
   }
@@ -253,7 +266,11 @@ function validateChoice(choice: ModelChoice, items: Item[]) {
     .filter((item): item is Item => Boolean(item));
 
   // One item per category — keep the first occurrence in the AI's order.
+  const seedItem = seedItemId ? byId.get(seedItemId) : undefined;
   const byCategory = new Map<string, Item>();
+  if (seedItem) {
+    byCategory.set(seedItem.category, seedItem);
+  }
   for (const item of selected) {
     if (!byCategory.has(item.category)) {
       byCategory.set(item.category, item);
@@ -289,7 +306,8 @@ export async function recommendOutfitWithAi(
   variation = 0,
   liked: Suggestion[] = [],
   disliked: Suggestion[] = [],
-  recentSuggestions: Suggestion[] = []
+  recentSuggestions: Suggestion[] = [],
+  seedItemId?: number,
 ): Promise<AiRecommendation> {
   const provider = configuredProvider();
   if (!provider) {
@@ -307,6 +325,7 @@ export async function recommendOutfitWithAi(
       liked,
       disliked,
       recentSuggestions,
+      seedItemId,
     );
     const baseTemp = 0.7;
     const temperature = Math.min(0.95, baseTemp + Math.min(variation, 3) * 0.07);
@@ -314,7 +333,7 @@ export async function recommendOutfitWithAi(
       provider === "anthropic"
         ? await callAnthropic(prompt, temperature)
         : await callOpenAi(prompt, temperature);
-    const validated = validateChoice(result.choice, items);
+    const validated = validateChoice(result.choice, items, seedItemId);
     return {
       ...fallback,
       items: validated.items,
